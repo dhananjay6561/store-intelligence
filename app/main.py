@@ -163,9 +163,22 @@ async def _compute_metrics_for_store(store_id: str, window: str = "today") -> di
 @app.get("/events/stream")
 async def event_stream(store_id: str, window: str = "all") -> StreamingResponse:
     async def _generator() -> AsyncIterator[str]:
+        # Send keep-alive comment every 2s; compute metrics every 4s to avoid blocking
+        tick = 0
         while True:
-            data = await _compute_metrics_for_store(store_id, window=window)
-            yield f"data: {json.dumps(data)}\n\n"
             await asyncio.sleep(2)
+            tick += 1
+            if tick % 2 == 0:
+                data = await _compute_metrics_for_store(store_id, window=window)
+                yield f"data: {json.dumps(data)}\n\n"
+            else:
+                yield ": keep-alive\n\n"
 
-    return StreamingResponse(_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        _generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
