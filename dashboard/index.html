@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Store Intelligence — Live Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <span class="logo">Store Intelligence</span>
+      <div class="store-selector">
+        <label for="storeSelect">Store:</label>
+        <select id="storeSelect">
+          <option value="ST1008">ST1008 — Brigade_Bangalore</option>
+        </select>
+      </div>
+      <div class="feed-status" id="feedStatus">● Connecting…</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Top KPI row -->
+    <div class="kpi-row">
+      <div class="kpi-card" id="kvVisitors">
+        <div class="kpi-label">Unique Visitors</div>
+        <div class="kpi-value" id="valVisitors">—</div>
+        <div class="kpi-sub">today</div>
+      </div>
+      <div class="kpi-card" id="kvConversion">
+        <div class="kpi-label">Conversion Rate</div>
+        <div class="kpi-value" id="valConversion">—</div>
+        <div class="kpi-sub">visitors → purchase</div>
+      </div>
+      <div class="kpi-card" id="kvQueue">
+        <div class="kpi-label">Queue Depth</div>
+        <div class="kpi-value" id="valQueue">—</div>
+        <div class="kpi-sub">billing counter now</div>
+      </div>
+      <div class="kpi-card" id="kvAbandonment">
+        <div class="kpi-label">Abandonment Rate</div>
+        <div class="kpi-value" id="valAbandonment">—</div>
+        <div class="kpi-sub">left billing queue</div>
+      </div>
+    </div>
+
+    <!-- Conversion rate chart + zone heatmap -->
+    <div class="mid-row">
+      <div class="chart-panel">
+        <div class="panel-title">Conversion Rate — Live (last 30 ticks)</div>
+        <canvas id="conversionChart" height="120"></canvas>
+      </div>
+      <div class="heatmap-panel">
+        <div class="panel-title">Zone Heatmap</div>
+        <div class="zone-grid" id="zoneGrid">
+          <div class="zone-placeholder">Waiting for data…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Anomalies panel -->
+    <div class="anomaly-panel">
+      <div class="panel-title">
+        Active Anomalies
+        <span class="anomaly-badge" id="anomalyBadge">0</span>
+      </div>
+      <ul class="anomaly-list" id="anomalyList">
+        <li class="anomaly-empty">No anomalies detected</li>
+      </ul>
+    </div>
+  </main>
+
+  <footer>
+    <span id="lastUpdated">Last updated: —</span>
+    <span id="traceId"></span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
