@@ -2,267 +2,182 @@
 
 const API_BASE = window.API_BASE ||
   (window.location.protocol === 'file:' ? 'http://localhost:8000' : '');
-const CHART_MAX_PTS  = 30;
-const QUEUE_WARN     = 5;
-const QUEUE_CRITICAL = 8;
-const POLL_INTERVAL  = 10_000;   // heatmap + anomalies + funnel
 
-// ─── Chart ────────────────────────────────────────────────────────
+const CHART_MAX  = 30;
+const QUEUE_WARN = 5;
+const QUEUE_CRIT = 8;
+const STAGE_NAMES = { ENTRY: 'Entry', ZONE_VISIT: 'Zone Visit', BILLING_QUEUE: 'Billing Queue', PURCHASE: 'Purchase' };
 
+// ── Chart ─────────────────────────────────────────────────────────
 let chart = null;
-const history = { labels: [], data: [] };
+const pts = { labels: [], data: [] };
 
 function initChart() {
-  const ctx = document.getElementById('conversionChart').getContext('2d');
+  const ctx = document.getElementById('convChart').getContext('2d');
   chart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: history.labels,
+      labels: pts.labels,
       datasets: [{
-        label: 'Conversion Rate',
-        data: history.data,
+        data: pts.data,
         borderColor: '#2563EB',
-        backgroundColor: 'rgba(37,99,235,0.06)',
-        pointBackgroundColor: '#2563EB',
-        pointRadius: 2.5,
-        pointHoverRadius: 5,
-        tension: 0.45,
-        borderWidth: 2,
+        backgroundColor: 'rgba(37,99,235,0.05)',
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.4,
+        borderWidth: 1.5,
         fill: true,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 400 },
-      interaction: { mode: 'index', intersect: false },
+      animation: false,
       scales: {
         y: {
           min: 0, max: 1,
-          ticks: {
-            color: '#9CA3AF',
-            font: { size: 11 },
-            callback: v => (v * 100).toFixed(0) + '%',
-          },
+          ticks: { color: '#9CA3AF', font: { size: 10 }, callback: v => (v * 100).toFixed(0) + '%' },
           grid: { color: '#F3F4F6' },
-          border: { dash: [4, 4] },
+          border: { display: false },
         },
         x: {
-          ticks: { color: '#9CA3AF', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 },
+          ticks: { color: '#9CA3AF', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 },
           grid: { display: false },
+          border: { display: false },
         },
       },
       plugins: {
         legend: { display: false },
         tooltip: {
           backgroundColor: '#1F2937',
-          titleColor: '#F9FAFB',
-          bodyColor: '#D1D5DB',
-          padding: 10,
-          cornerRadius: 8,
-          callbacks: { label: ctx => ' ' + (ctx.parsed.y * 100).toFixed(1) + '%' },
+          bodyColor: '#F9FAFB',
+          padding: 8, cornerRadius: 6,
+          callbacks: { label: c => (c.parsed.y * 100).toFixed(1) + '%' },
         },
       },
     },
   });
 }
 
-function pushChartPoint(rate) {
-  const now = new Date();
-  const label = now.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  history.labels.push(label);
-  history.data.push(rate);
-  if (history.labels.length > CHART_MAX_PTS) {
-    history.labels.shift();
-    history.data.shift();
-  }
+function addChartPoint(rate) {
+  const t = new Date().toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  pts.labels.push(t); pts.data.push(rate);
+  if (pts.labels.length > CHART_MAX) { pts.labels.shift(); pts.data.shift(); }
   chart && chart.update('none');
 }
 
-// ─── KPI cards ────────────────────────────────────────────────────
-
+// ── KPIs ──────────────────────────────────────────────────────────
 function updateKpis(m) {
-  setText('valVisitors',  m.unique_visitors ?? '—');
+  set('valVisitors', m.unique_visitors ?? '—');
 
   const rate = m.conversion_rate ?? 0;
-  setText('valConversion', fmtPct(rate));
-  setClass('cardConversion', rate < 0.1 ? 'kpi-card state-warn' : 'kpi-card');
+  const rateEl = document.getElementById('valConversion');
+  if (rateEl) { rateEl.textContent = pct(rate); rateEl.className = 'kpi-value' + (rate < 0.1 ? ' warn' : ''); }
 
   const qd = m.queue_depth_current ?? 0;
-  setText('valQueue', qd);
-  setClass('cardQueue',
-    qd >= QUEUE_CRITICAL ? 'kpi-card state-alert' :
-    qd >= QUEUE_WARN     ? 'kpi-card state-warn'  : 'kpi-card');
-  const pct = Math.min(100, (qd / QUEUE_CRITICAL) * 100);
-  const fill = document.getElementById('queueBar');
+  const qdEl = document.getElementById('valQueue');
+  if (qdEl) { qdEl.textContent = qd; qdEl.className = 'kpi-value' + (qd >= QUEUE_CRIT ? ' alert' : qd >= QUEUE_WARN ? ' warn' : ''); }
+  const fill = document.getElementById('queueFill');
   if (fill) {
-    fill.style.width = pct + '%';
-    fill.style.background = qd >= QUEUE_CRITICAL ? '#DC2626' : qd >= QUEUE_WARN ? '#D97706' : '#059669';
+    fill.style.width = Math.min(100, (qd / QUEUE_CRIT) * 100) + '%';
+    fill.style.background = qd >= QUEUE_CRIT ? '#DC2626' : qd >= QUEUE_WARN ? '#D97706' : '#16A34A';
   }
 
   const ar = m.abandonment_rate ?? 0;
-  setText('valAbandonment', fmtPct(ar));
-  setClass('cardAbandonment', ar > 0.4 ? 'kpi-card state-alert' : ar > 0.2 ? 'kpi-card state-warn' : 'kpi-card');
+  const arEl = document.getElementById('valAbandonment');
+  if (arEl) { arEl.textContent = pct(ar); arEl.className = 'kpi-value' + (ar > 0.4 ? ' alert' : ''); }
 
-  pushChartPoint(rate);
+  addChartPoint(rate);
 
-  const ts = new Date();
-  setText('lastUpdated', 'Updated ' + ts.toLocaleTimeString('en-IN', { hour12: true }));
-  setText('footerTs', ts.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }));
+  const now = new Date();
+  set('updatedAt', now.toLocaleTimeString('en-IN', { hour12: true }));
+  set('footerTime', now.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }));
 }
 
-// ─── Zone heatmap ─────────────────────────────────────────────────
-
+// ── Heatmap ───────────────────────────────────────────────────────
 function renderHeatmap(zones) {
-  if (!zones || !zones.length) return;
+  if (!zones?.length) return;
   const grid = document.getElementById('zoneGrid');
-  const chip = document.getElementById('confidenceChip');
-
-  const confidence = zones[0]?.data_confidence ?? 'LOW';
-  if (chip) {
-    chip.textContent = confidence;
-    chip.className = 'confidence-chip' + (confidence === 'LOW' ? ' low' : '');
-  }
+  const tag  = document.getElementById('confidenceTag');
+  const conf = zones[0]?.data_confidence ?? 'LOW';
+  if (tag) tag.textContent = conf === 'HIGH' ? '' : 'Low data confidence';
 
   grid.innerHTML = zones.map(z => {
-    const { bg, text, border } = zoneColour(z.score);
-    const dwell = z.avg_dwell_ms > 0 ? Math.round(z.avg_dwell_ms / 1000) + 's dwell' : 'no dwell data';
-    return `
-      <div class="zone-cell" style="background:${bg};border-color:${border}">
-        <div class="zone-name" style="color:${text}">${z.zone_id.replace(/_/g,' ')}</div>
-        <div class="zone-score" style="color:${text}">${z.score}</div>
-        <div class="zone-meta" style="color:${text}">${z.visit_count} visits · ${dwell}</div>
-      </div>`;
+    const intensity = z.score >= 80 ? 'h-3' : z.score >= 50 ? 'h-2' : z.score >= 15 ? 'h-1' : 'h-0';
+    return `<div class="zone-cell ${intensity}">
+      <div class="zone-name">${z.zone_id.replace(/_/g,' ')}</div>
+      <div class="zone-score">${z.score}</div>
+      <div class="zone-visits">${z.visit_count} visits</div>
+    </div>`;
   }).join('');
 }
 
-function zoneColour(score) {
-  if (score >= 80) return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
-  if (score >= 50) return { bg: '#F0F9FF', text: '#0369A1', border: '#BAE6FD' };
-  if (score >= 20) return { bg: '#F8FAFC', text: '#475569', border: '#E2E8F0' };
-  return               { bg: '#F9FAFB', text: '#9CA3AF', border: '#F3F4F6' };
-}
-
-// ─── Funnel ───────────────────────────────────────────────────────
-
+// ── Funnel ────────────────────────────────────────────────────────
 function renderFunnel(funnel) {
-  if (!funnel || !funnel.length) return;
-  const container = document.getElementById('funnelStages');
+  if (!funnel?.length) return;
+  const tbody = document.getElementById('funnelBody');
   const top = funnel[0].sessions || 1;
-
-  container.innerHTML = funnel.map(stage => {
-    const pct = Math.round((stage.sessions / top) * 100);
-    const hasDrop = stage.drop_off_pct > 0;
-    return `
-      <div class="funnel-row">
-        <div class="funnel-stage-name">${fmtStageName(stage.stage)}</div>
-        <div class="funnel-bar-wrap">
-          <div class="funnel-track">
-            <div class="funnel-fill" style="width:${pct}%"></div>
-          </div>
-        </div>
-        <div class="funnel-right">
-          <div class="funnel-count">${stage.sessions.toLocaleString()}</div>
-          <div class="funnel-drop ${hasDrop ? 'has-drop' : ''}">${hasDrop ? '▼ ' + stage.drop_off_pct + '%' : '—'}</div>
-        </div>
-      </div>`;
+  tbody.innerHTML = funnel.map(s => {
+    const w = Math.round((s.sessions / top) * 100);
+    const hasDrop = s.drop_off_pct > 0;
+    return `<tr>
+      <td><span class="stage-name">${STAGE_NAMES[s.stage] || s.stage}</span></td>
+      <td class="stage-bar-cell">
+        <div class="stage-bar-wrap"><div class="stage-bar-fill" style="width:${w}%"></div></div>
+      </td>
+      <td><span class="stage-count">${s.sessions.toLocaleString()}</span></td>
+      <td><span class="stage-drop ${hasDrop ? 'has-drop' : ''}">${hasDrop ? '▼ ' + s.drop_off_pct + '%' : '—'}</span></td>
+    </tr>`;
   }).join('');
 }
 
-function fmtStageName(s) {
-  const map = { ENTRY: 'Entry', ZONE_VISIT: 'Zone Visit', BILLING_QUEUE: 'Billing Queue', PURCHASE: 'Purchase' };
-  return map[s] || s;
-}
-
-// ─── Anomalies ────────────────────────────────────────────────────
-
+// ── Anomalies ─────────────────────────────────────────────────────
 function renderAnomalies(anomalies) {
   const list  = document.getElementById('anomalyList');
-  const count = document.getElementById('anomalyCount');
+  const badge = document.getElementById('anomalyBadge');
+  if (!list || !badge) return;
 
-  count.textContent = anomalies.length;
+  badge.textContent = anomalies.length;
   const hasCrit = anomalies.some(a => a.severity === 'CRITICAL');
   const hasWarn = anomalies.some(a => a.severity === 'WARN');
-  count.className = 'anomaly-count' + (hasCrit ? ' has-critical' : hasWarn ? ' has-warn' : '');
+  badge.className = 'anomaly-count-badge' + (hasCrit ? ' crit' : hasWarn ? ' warn' : '');
 
   if (!anomalies.length) {
-    list.innerHTML = `
-      <div class="anomaly-empty">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.5">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-        </svg>
-        <span>All systems normal</span>
-      </div>`;
+    list.innerHTML = '<div class="anomaly-empty">✓ All clear</div>';
     return;
   }
-
-  list.innerHTML = anomalies.map(a => `
-    <div class="anomaly-item ${a.severity}">
-      <span class="anomaly-badge ${a.severity}">${a.severity}</span>
-      <div class="anomaly-body">
+  list.innerHTML = '<div class="anomaly-list">' + anomalies.map(a => `
+    <div class="anomaly-row">
+      <span class="sev-tag ${a.severity}">${a.severity}</span>
+      <div>
         <div class="anomaly-type">${a.type.replace(/_/g,' ')}</div>
         <div class="anomaly-desc">${a.description}</div>
-        <div class="anomaly-action">→ ${a.suggested_action}</div>
+        <div class="anomaly-action">${a.suggested_action}</div>
       </div>
-    </div>`).join('');
+    </div>`).join('') + '</div>';
 }
 
-// ─── Feed status ──────────────────────────────────────────────────
-
-let _lastFetchOk = false;
-
-function setFeedStatus(ok) {
-  const badge = document.getElementById('feedBadge');
-  const label = document.getElementById('feedLabel');
-  if (!badge || !label) return;
-  _lastFetchOk = ok;
-  if (ok) {
-    badge.className = 'feed-badge live';
-    label.textContent = 'Live';
-  } else {
-    badge.className = 'feed-badge stale';
-    label.textContent = 'Disconnected';
-  }
+// ── Status ────────────────────────────────────────────────────────
+function setStatus(ok) {
+  const dot   = document.getElementById('statusDot');
+  const label = document.getElementById('statusLabel');
+  if (dot)   { dot.className   = 'status-dot ' + (ok ? 'live' : 'stale'); }
+  if (label) { label.textContent = ok ? 'Live' : 'Disconnected'; }
 }
 
-// ─── Initial load — populate everything immediately on page load ───
-
+// ── Fetchers ──────────────────────────────────────────────────────
 async function fetchMetrics(storeId) {
   try {
     const r = await fetch(`${API_BASE}/stores/${storeId}/metrics?window=all`);
-    if (r.ok) {
-      updateKpis(await r.json());
-      setFeedStatus(true);
-    } else {
-      setFeedStatus(false);
-    }
-  } catch (_) {
-    setFeedStatus(false);
-  }
+    if (r.ok) { updateKpis(await r.json()); setStatus(true); }
+    else setStatus(false);
+  } catch (_) { setStatus(false); }
 }
-
-async function initialLoad(storeId) {
-  await Promise.all([
-    fetchMetrics(storeId),
-    fetchHeatmap(storeId),
-    fetchFunnel(storeId),
-    fetchAnomalies(storeId),
-  ]);
-}
-
-// ─── Polling ──────────────────────────────────────────────────────
 
 async function fetchHeatmap(storeId) {
   try {
     const r = await fetch(`${API_BASE}/stores/${storeId}/heatmap?window=all`);
     if (r.ok) renderHeatmap((await r.json()).zones);
-  } catch (_) {}
-}
-
-async function fetchAnomalies(storeId) {
-  try {
-    const r = await fetch(`${API_BASE}/stores/${storeId}/anomalies`);
-    if (r.ok) renderAnomalies((await r.json()).anomalies);
   } catch (_) {}
 }
 
@@ -273,30 +188,26 @@ async function fetchFunnel(storeId) {
   } catch (_) {}
 }
 
-
-// ─── Helpers ──────────────────────────────────────────────────────
-
-function setText(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = val;
+async function fetchAnomalies(storeId) {
+  try {
+    const r = await fetch(`${API_BASE}/stores/${storeId}/anomalies`);
+    if (r.ok) renderAnomalies((await r.json()).anomalies);
+  } catch (_) {}
 }
-function setClass(id, cls) {
-  const el = document.getElementById(id);
-  if (el) el.className = cls;
-}
-function fmtPct(v) { return (v * 100).toFixed(1) + '%'; }
 
-// ─── Boot ─────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────
+function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function pct(v) { return (v * 100).toFixed(1) + '%'; }
 
+// ── Boot ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  const storeId = 'ST1008';
+  const store = 'ST1008';
   initChart();
-  initialLoad(storeId);                          // populate instantly on load
 
-  setInterval(() => fetchMetrics(storeId), 4000); // refresh KPIs every 4s
-  setInterval(() => {                             // refresh rest every 10s
-    fetchHeatmap(storeId);
-    fetchFunnel(storeId);
-    fetchAnomalies(storeId);
-  }, POLL_INTERVAL);
+  Promise.all([fetchMetrics(store), fetchHeatmap(store), fetchFunnel(store), fetchAnomalies(store)]);
+
+  setInterval(() => fetchMetrics(store),    4_000);
+  setInterval(() => fetchHeatmap(store),   10_000);
+  setInterval(() => fetchFunnel(store),    10_000);
+  setInterval(() => fetchAnomalies(store), 10_000);
 });
