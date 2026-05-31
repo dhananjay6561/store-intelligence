@@ -1,11 +1,10 @@
 'use strict';
 
-const API_BASE        = window.API_BASE || 'http://localhost:8000';
-const CHART_MAX_PTS   = 30;
-const QUEUE_WARN      = 5;
-const QUEUE_CRITICAL  = 8;
-const POLL_INTERVAL   = 10_000;   // heatmap + anomalies + funnel
-const SSE_RECONNECT   = 5_000;
+const API_BASE       = window.API_BASE || 'http://localhost:8000';
+const CHART_MAX_PTS  = 30;
+const QUEUE_WARN     = 5;
+const QUEUE_CRITICAL = 8;
+const POLL_INTERVAL  = 10_000;   // heatmap + anomalies + funnel
 
 // ─── Chart ────────────────────────────────────────────────────────
 
@@ -209,11 +208,14 @@ function renderAnomalies(anomalies) {
 
 // ─── Feed status ──────────────────────────────────────────────────
 
-function setFeedStatus(live) {
+let _lastFetchOk = false;
+
+function setFeedStatus(ok) {
   const badge = document.getElementById('feedBadge');
   const label = document.getElementById('feedLabel');
   if (!badge || !label) return;
-  if (live) {
+  _lastFetchOk = ok;
+  if (ok) {
     badge.className = 'feed-badge live';
     label.textContent = 'Live';
   } else {
@@ -222,27 +224,20 @@ function setFeedStatus(live) {
   }
 }
 
-// ─── SSE ──────────────────────────────────────────────────────────
-
-function startSSE(storeId) {
-  const es = new EventSource(`${API_BASE}/events/stream?store_id=${encodeURIComponent(storeId)}&window=all`);
-  es.onopen    = () => setFeedStatus(true);
-  es.onerror   = () => { setFeedStatus(false); es.close(); setTimeout(() => startSSE(storeId), SSE_RECONNECT); };
-  es.onmessage = (evt) => {
-    try {
-      const m = JSON.parse(evt.data);
-      if (!m.error) updateKpis(m);
-    } catch (_) {}
-  };
-}
-
 // ─── Initial load — populate everything immediately on page load ───
 
 async function fetchMetrics(storeId) {
   try {
     const r = await fetch(`${API_BASE}/stores/${storeId}/metrics?window=all`);
-    if (r.ok) updateKpis(await r.json());
-  } catch (_) {}
+    if (r.ok) {
+      updateKpis(await r.json());
+      setFeedStatus(true);
+    } else {
+      setFeedStatus(false);
+    }
+  } catch (_) {
+    setFeedStatus(false);
+  }
 }
 
 async function initialLoad(storeId) {
@@ -295,9 +290,10 @@ function fmtPct(v) { return (v * 100).toFixed(1) + '%'; }
 document.addEventListener('DOMContentLoaded', () => {
   const storeId = 'ST1008';
   initChart();
-  initialLoad(storeId);          // populate instantly on every page load
-  startSSE(storeId);             // then keep KPIs live via SSE
-  setInterval(() => {            // keep heatmap / funnel / anomalies fresh
+  initialLoad(storeId);                          // populate instantly on load
+
+  setInterval(() => fetchMetrics(storeId), 4000); // refresh KPIs every 4s
+  setInterval(() => {                             // refresh rest every 10s
     fetchHeatmap(storeId);
     fetchFunnel(storeId);
     fetchAnomalies(storeId);
