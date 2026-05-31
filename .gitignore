@@ -13,7 +13,7 @@ htmlcov/
 data/store_intel.db
 data/store_intel.db-shm
 data/store_intel.db-wal
-data/events/*.jsonl
+# data/events/*.jsonl
 data/clips/
 *.pt
 runs/
