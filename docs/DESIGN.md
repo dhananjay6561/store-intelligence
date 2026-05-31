@@ -86,49 +86,80 @@ The `sessions` view pre-aggregates per-visitor state. Funnel and conversion endp
 
 ## Stage 4: Live Dashboard
 
-### SSE vs WebSocket
-Server-Sent Events were chosen over WebSockets for two reasons: the dashboard only needs server→client data flow (no bidirectional communication), and SSE works through HTTP/1.1 proxies without upgrade handshakes. The `/events/stream` endpoint yields a JSON-serialised `MetricsResponse` every 2 seconds. The client reconnects automatically on connection drop.
+### SSE attempted, then removed
+
+SSE was the first implementation: a `/events/stream` FastAPI endpoint with a `while True: await asyncio.sleep(2)` generator yielding metric payloads. It worked in isolation but caused the uvicorn process to spin at 97% CPU and become unresponsive to all other requests after 3–4 minutes. The generator's async loop consumed the event loop even between connected clients, blocking health checks and ingest calls.
+
+The fix was not to optimise the generator — it was to remove it entirely. The dashboard now uses `setInterval` polling four independent REST endpoints at 4-second and 10-second intervals. The server goes idle between polls. This is less "real-time" in name but functionally equivalent for a retail analytics use case where metrics don't change faster than once every few seconds.
+
+The SSE endpoint is documented here as a deliberate trade-off, not an oversight.
 
 ### What Is Displayed
-- **Conversion rate sparkline** — 30-point rolling history via Chart.js, updated every SSE tick
-- **Zone heatmap** — colour-coded 0–100 normalised scores, polled every 10 seconds
-- **Queue depth indicator** — card background changes from neutral → amber → red at thresholds 5 and 8
-- **Anomaly panel** — badge count + list of active anomalies, polled every 10 seconds
+- **Conversion rate sparkline** — 30-point rolling history via Chart.js, polling every 4s
+- **Zone heatmap** — 0–100 normalised scores by visit count, polling every 10s
+- **Queue depth indicator** — progress bar turns amber at 5, red at 8
+- **Anomaly panel** — badge count + list, polling every 10s
 
 ---
 
 ## AI-Assisted Decisions
 
-### Decision 1: Re-ID Strategy
-
-**What was asked:** How to handle the same physical person exiting one camera's frame and re-entering a few minutes later — avoiding double-counting in the conversion funnel.
-
-**What the model suggested:** Using a dedicated Re-ID model such as OSNet or FastReID to generate 512-dimensional feature embeddings per track, then performing cosine-similarity matching against a gallery of recently lost tracks.
-
-**What was implemented:** Bounding-box centroid proximity (< 200px) + torso colour histogram comparison (Bhattacharyya distance < 0.3). No dedicated Re-ID model.
-
-**Why it diverged:** The challenge explicitly prohibits GPU requirements ("No GPU-heavy OSNet"). More importantly, for batch processing of 20-minute beauty store clips at 15fps on a single machine, the histogram approach runs in microseconds per frame vs. ~2ms per frame for an embedding model. The accuracy trade-off is acceptable: in a constrained retail space, two people re-entering within 200px of the same spot within 5 minutes is unlikely to be a coincidence.
+Each section below follows the format: what the problem was, what the LLM suggested when asked, what was actually built, and crucially where the suggestion was wrong or incomplete.
 
 ---
 
-### Decision 2: Anomaly Thresholds
+### Decision 1: Re-ID without an embedding model
 
-**What was asked:** What thresholds should trigger billing queue spike anomalies, and how should conversion drop be computed.
+**The problem:** ByteTrack loses a track_id when a person exits the frame and re-enters later — even seconds later after a brief occlusion. Without Re-ID, every re-entry creates a new ENTRY event and inflates unique_visitors. Asked the LLM how to handle same-person re-entry in a batch offline pipeline.
 
-**What the model suggested:** Dynamic thresholds derived from 30-day rolling mean + 2σ standard deviation — WARN when queue depth exceeds mean + 1σ, CRITICAL when it exceeds mean + 2σ. For conversion drop, compare today's hourly rate against the same hour's 7-day average.
+**What the LLM suggested:** OSNet or FastReID — generate 512-dimensional appearance embeddings per track, cosine-similarity match against a gallery of recently-lost tracks. Cited papers showing 90%+ rank-1 accuracy on Market-1501 benchmark.
 
-**What was implemented:** Fixed thresholds configurable via environment variables (`QUEUE_SPIKE_WARN_THRESHOLD=5`, `QUEUE_SPIKE_CRITICAL_THRESHOLD=8`). Conversion drop uses a simple 7-day rolling average (not hour-bucketed).
+**What was built instead:** Centroid proximity (< 200px) + torso colour histogram (18×16 bin HSV, Bhattacharyya distance < 0.3). 5-minute window.
 
-**Why it diverged:** Dynamic σ-based thresholds require sufficient historical data to be meaningful — a store that has been live for one week has no reliable σ estimate. Fixed thresholds with environment variable overrides give operators immediate control and work from day 0. The hour-bucketed comparison was dropped because the Brigade Bangalore POS data only spans one day, making same-hour averaging impractical.
+**Where the suggestion was wrong:** The LLM assumed a GPU was available and that the Market-1501 benchmark was relevant. Market-1501 tests across disjoint camera networks with identical lighting and clean crops — the Brigade store has partial occlusions, aisle reflections, and clothing that looks similar in histogram space anyway (customers in a beauty store skew toward similar casual clothing). An OSNet model pretrained on pedestrian re-ID data does not transfer well to retail without fine-tuning data we don't have. The simpler geometric approach is honest about its limitations: it works for same-camera re-entry (which is the common case) and fails for cross-camera floor transitions (which is the edge case documented in README Known Limitations).
+
+**Worst-case failure mode for the implemented approach:** Two customers wearing similar light-coloured tops enter through the same entry point within 5 minutes of each other. The histogram distance will be low and the centroids will overlap near the entry threshold — this produces a false Re-ID merge where customer B's session inherits customer A's visitor_id. In practice, the entry threshold area is a bottleneck, so this scenario produces a wrong REENTRY rather than a wrong session count in the funnel, because the first visitor's session is already closed by EXIT before the second arrives.
 
 ---
 
-### Decision 3: Session Seq and Metadata Field Design
+### Decision 2: Anomaly thresholds — fixed vs. adaptive
 
-**What was asked:** Should optional, event-type-specific fields (queue_depth, sku_zone) live at the top level of the event schema or inside a nested metadata object?
+**The problem:** What should trigger a BILLING_QUEUE_SPIKE and a CONVERSION_DROP? Both require a threshold above which something is considered anomalous.
 
-**What the model suggested:** Flat schema with all fields at the top level, using `None` for inapplicable fields. Rationale: simpler deserialization, no nested traversal.
+**What the LLM suggested:** Statistical control chart approach — compute 30-day rolling mean and standard deviation, emit WARN at mean + 1σ and CRITICAL at mean + 2σ. For conversion drop, use same-hour 7-day comparison to control for hourly patterns (foot traffic at 2pm is different from 9am).
 
-**What was implemented:** Nested `metadata` object containing `queue_depth`, `sku_zone`, `session_seq`, and `low_conf`.
+**What was built instead:** Fixed environment-variable thresholds (default WARN=5, CRITICAL=8 for queue; 70% of 7-day mean for conversion). Simple rolling average, no hour bucketing.
 
-**Why it diverged:** The hot SQL path only ever queries `store_id`, `timestamp`, `visitor_id`, `event_type`, `zone_id`, and `is_staff` — all at the top level and all indexed. The optional fields are only materialised when computing specific metrics. Keeping them in `metadata` prevents column proliferation and makes the `raw_json` audit trail self-contained. The `session_seq` field was added after observing that multiple events for the same visitor at the same millisecond timestamp (common during fast zone transitions) could not be ordered without an explicit ordinal.
+**Why the suggestion was rejected — and one part kept:** The 2σ approach requires at minimum 20–30 data points for σ to be meaningful. A store going live on day 1 has zero history; the model would emit no anomalies for weeks until enough data accumulates, which is the opposite of what a new deployment needs. Fixed thresholds with operator overrides work on day 0.
+
+The part that was kept: the 7-day comparison window for conversion drop is sound, and the day-0 edge case is handled explicitly (`if avg_rate == 0.0: return None`). The hour-bucketing was dropped because the Brigade Bangalore data spans a single day — computing same-hour averages from one day's data is meaningless and would produce constant CONVERSION_DROP false positives in the morning hours.
+
+---
+
+### Decision 3: Nested metadata vs. flat schema
+
+**The problem:** The event schema has fields that are only relevant for specific event types — `queue_depth` only for `BILLING_QUEUE_JOIN`, `sku_zone` only for zone events. How should optional type-specific fields be structured?
+
+**What the LLM suggested:** Flat top-level schema. All fields present on every event, set to `null` when not applicable. Argument: simpler deserialization, no nested traversal, consistent structure.
+
+**What was built:** Nested `metadata` object for `queue_depth`, `sku_zone`, `session_seq`, `low_conf`.
+
+**Where the suggestion was partially right:** For the API response layer and SQL queries, the flat suggestion would have been fine. Most queries only touch the top-level indexed fields (`store_id`, `event_type`, `timestamp`, `visitor_id`, `is_staff`). The metadata fields are never queried directly in WHERE clauses.
+
+**Why nested was chosen anyway:** The `raw_json` column stores the complete event for audit. With a flat schema, `raw_json` and the individual columns are redundant. The nested structure makes `raw_json` the authoritative record and the individual columns a materialised index into it. More importantly, `session_seq` was added mid-build after discovering that ZONE_EXIT and ZONE_ENTER events from the same frame had identical timestamps — ordering them required an ordinal field. A flat schema would have made this a top-level field, which felt wrong for what is essentially processing metadata. It belongs in `metadata`.
+
+---
+
+## Known Investigation: HAIRCARE and FRAGRANCE at Zero Visits
+
+The heatmap returns 0 visits for HAIRCARE and FRAGRANCE across all five clips. There are two possible explanations, and they require different fixes:
+
+**Hypothesis A — FOV mismatch (most likely):** The zone polygons for HAIRCARE and FRAGRANCE were drawn against an assumed camera layout where CAM_3 covers the back half of the store floor. If CAM_3 is actually pointed at a different section, or if those product areas are simply outside all five camera fields of view, centroids will never fall inside those polygons.
+
+Diagnostic: Take a single frame from CAM_3, overlay the zone polygon coordinates on it, and check whether the HAIRCARE/FRAGRANCE polygons land on the actual wall those products are displayed on. If the polygons land in an aisle or on a wall with different products, recalibrate the coordinates against a measured floor plan.
+
+**Hypothesis B — Zone polygon calibration error:** The polygons are defined in pixel coordinates against a 1920×1080 frame. If the actual camera resolution, crop, or lens distortion shifts the coordinate space, a polygon that looks correct on paper misses the real floor area.
+
+Diagnostic: Log centroid coordinates for all CAM_3 detections into a scatter plot and overlay the zone polygons. Any centroids consistently clustering outside the polygon boundaries indicate a calibration offset.
+
+**Why it was not fixed before submission:** Without a floor plan mapped to actual pixel coordinates for each camera, recalibrating is guesswork. The zero-visit result is reported honestly in the heatmap with `data_confidence: HIGH` (because there are >20 sessions, just none in those zones). Surfacing a zero rather than hiding it is the correct behaviour — it flags a data quality issue rather than masking it.
