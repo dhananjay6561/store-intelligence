@@ -236,6 +236,24 @@ function startSSE(storeId) {
   };
 }
 
+// ─── Initial load — populate everything immediately on page load ───
+
+async function fetchMetrics(storeId) {
+  try {
+    const r = await fetch(`${API_BASE}/stores/${storeId}/metrics?window=all`);
+    if (r.ok) updateKpis(await r.json());
+  } catch (_) {}
+}
+
+async function initialLoad(storeId) {
+  await Promise.all([
+    fetchMetrics(storeId),
+    fetchHeatmap(storeId),
+    fetchFunnel(storeId),
+    fetchAnomalies(storeId),
+  ]);
+}
+
 // ─── Polling ──────────────────────────────────────────────────────
 
 async function fetchHeatmap(storeId) {
@@ -259,16 +277,6 @@ async function fetchFunnel(storeId) {
   } catch (_) {}
 }
 
-function startPolling(storeId) {
-  fetchHeatmap(storeId);
-  fetchAnomalies(storeId);
-  fetchFunnel(storeId);
-  setInterval(() => {
-    fetchHeatmap(storeId);
-    fetchAnomalies(storeId);
-    fetchFunnel(storeId);
-  }, POLL_INTERVAL);
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
@@ -287,6 +295,11 @@ function fmtPct(v) { return (v * 100).toFixed(1) + '%'; }
 document.addEventListener('DOMContentLoaded', () => {
   const storeId = 'ST1008';
   initChart();
-  startSSE(storeId);
-  startPolling(storeId);
+  initialLoad(storeId);          // populate instantly on every page load
+  startSSE(storeId);             // then keep KPIs live via SSE
+  setInterval(() => {            // keep heatmap / funnel / anomalies fresh
+    fetchHeatmap(storeId);
+    fetchFunnel(storeId);
+    fetchAnomalies(storeId);
+  }, POLL_INTERVAL);
 });
