@@ -141,7 +141,7 @@ app.include_router(health.router)
 
 # --- SSE Streaming endpoint for dashboard ---
 
-async def _compute_metrics_for_store(store_id: str) -> dict:
+async def _compute_metrics_for_store(store_id: str, window: str = "today") -> dict:
     from app.db import get_db
     from app.metrics import get_metrics
     from fastapi import Request as _Req
@@ -153,7 +153,7 @@ async def _compute_metrics_for_store(store_id: str) -> dict:
         state = _FakeState()
 
     try:
-        result = await get_metrics(store_id, _FakeReq(), window="today")  # type: ignore[arg-type]
+        result = await get_metrics(store_id, _FakeReq(), window=window)  # type: ignore[arg-type]
         return result.model_dump()
     except Exception as exc:
         logger.warning("SSE metrics fetch failed", extra={"store_id": store_id, "error": str(exc)})
@@ -161,10 +161,10 @@ async def _compute_metrics_for_store(store_id: str) -> dict:
 
 
 @app.get("/events/stream")
-async def event_stream(store_id: str) -> StreamingResponse:
+async def event_stream(store_id: str, window: str = "all") -> StreamingResponse:
     async def _generator() -> AsyncIterator[str]:
         while True:
-            data = await _compute_metrics_for_store(store_id)
+            data = await _compute_metrics_for_store(store_id, window=window)
             yield f"data: {json.dumps(data)}\n\n"
             await asyncio.sleep(2)
 

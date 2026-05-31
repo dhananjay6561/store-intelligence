@@ -140,7 +140,7 @@ function setFeedStatus(ok) {
 
 async function fetchHeatmap(storeId) {
   try {
-    const resp = await fetch(`${API_BASE}/stores/${storeId}/heatmap`);
+    const resp = await fetch(`${API_BASE}/stores/${storeId}/heatmap?window=all`);
     if (!resp.ok) return;
     const data = await resp.json();
     renderHeatmap(data.zones);
