@@ -5,7 +5,6 @@ Middleware injects trace_id into request.state and emits structured JSON logs
 with endpoint, latency_ms, and status_code on every request.
 """
 
-import asyncio
 import json
 import logging
 import logging.config
@@ -17,12 +16,11 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import anomalies, funnel, health, heatmap, ingestion, metrics
 from app.db import close_db, init_db
-from app.models import MetricsResponse
 
 _LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 _DB_PATH = os.getenv("DATABASE_URL", "./data/store_intel.db").replace(
@@ -140,49 +138,6 @@ app.include_router(anomalies.router)
 app.include_router(health.router)
 
 
-# --- SSE Streaming endpoint for dashboard ---
-
-async def _compute_metrics_for_store(store_id: str, window: str = "today") -> dict:
-    from app.db import get_db
-    from app.metrics import get_metrics
-    from fastapi import Request as _Req
-
-    class _FakeState:
-        trace_id = "sse"
-
-    class _FakeReq:
-        state = _FakeState()
-
-    try:
-        result = await get_metrics(store_id, _FakeReq(), window=window)  # type: ignore[arg-type]
-        return result.model_dump()
-    except Exception as exc:
-        logger.warning("SSE metrics fetch failed", extra={"store_id": store_id, "error": str(exc)})
-        return {"store_id": store_id, "error": str(exc)}
-
-
-@app.get("/events/stream")
-async def event_stream(store_id: str, window: str = "all") -> StreamingResponse:
-    async def _generator() -> AsyncIterator[str]:
-        # Send keep-alive comment every 2s; compute metrics every 4s to avoid blocking
-        tick = 0
-        while True:
-            await asyncio.sleep(2)
-            tick += 1
-            if tick % 2 == 0:
-                data = await _compute_metrics_for_store(store_id, window=window)
-                yield f"data: {json.dumps(data)}\n\n"
-            else:
-                yield ": keep-alive\n\n"
-
-    return StreamingResponse(
-        _generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 # Serve dashboard at http://localhost:8000/ — must be mounted last
