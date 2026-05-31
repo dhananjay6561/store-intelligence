@@ -5,7 +5,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 import pytest
 import pytest_asyncio
@@ -45,15 +45,15 @@ def sync_client(db):
 def _make_event(
     store_id: str = TEST_STORE_ID,
     event_type: str = "ENTRY",
-    visitor_id: str | None = None,
+    visitor_id: Optional[str] = None,
     camera_id: str = "CAM_1",
-    zone_id: str | None = None,
+    zone_id: Optional[str] = None,
     is_staff: bool = False,
     dwell_ms: int = 0,
     confidence: float = 0.85,
     session_seq: int = 1,
-    queue_depth: int | None = None,
-    timestamp: str | None = None,
+    queue_depth: Optional[int] = None,
+    timestamp: Optional[str] = None,
 ) -> StoreEvent:
     if visitor_id is None:
         visitor_id = "VIS_" + uuid.uuid4().hex[:6].upper()

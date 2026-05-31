@@ -11,7 +11,7 @@ from tests.conftest import TEST_STORE_ID, _make_event
 @pytest.mark.asyncio
 async def test_funnel_reentry_does_not_double_count(async_client):
     """One visitor with ENTRY + REENTRY counts as 1 session at ENTRY stage."""
-    vid = "VIS_REENTRY"
+    vid = "VIS_" + "re1234".upper()
     events = [
         _make_event(event_type="ENTRY",   visitor_id=vid, session_seq=1).model_dump(),
         _make_event(event_type="EXIT",    visitor_id=vid, session_seq=2).model_dump(),
@@ -84,7 +84,7 @@ async def test_funnel_has_all_four_stages(async_client):
 @pytest.mark.asyncio
 async def test_funnel_stages_monotonically_decreasing(async_client):
     """Each subsequent stage session count must be <= the previous one."""
-    vid = "VIS_FUNNEL1"
+    vid = "VIS_" + "f1b2c3".upper()
     events = [
         _make_event(event_type="ENTRY", visitor_id=vid, session_seq=1).model_dump(),
         _make_event(event_type="ZONE_ENTER", visitor_id=vid, zone_id="SKINCARE", session_seq=2).model_dump(),

@@ -11,6 +11,7 @@ Four anomaly types detected from live event data:
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Request
 
@@ -66,7 +67,7 @@ async def get_anomalies(store_id: str, request: Request) -> AnomaliesResponse:
     return AnomaliesResponse(store_id=store_id, anomalies=anomalies)
 
 
-async def _detect_queue_spike(db, store_id: str, now: datetime) -> Anomaly | None:
+async def _detect_queue_spike(db, store_id: str, now: datetime) -> Optional[Anomaly]:
     warn_threshold = _queue_warn_threshold()
     critical_threshold = _queue_critical_threshold()
     spike_window_minutes = 2
@@ -110,7 +111,7 @@ async def _detect_queue_spike(db, store_id: str, now: datetime) -> Anomaly | Non
     return None
 
 
-async def _detect_conversion_drop(db, store_id: str, now: datetime) -> Anomaly | None:
+async def _detect_conversion_drop(db, store_id: str, now: datetime) -> Optional[Anomaly]:
     drop_threshold = _conversion_drop_pct()
 
     # Today's conversion rate
@@ -159,7 +160,7 @@ async def _detect_conversion_drop(db, store_id: str, now: datetime) -> Anomaly |
     return None
 
 
-async def _detect_dead_zone(db, store_id: str, now: datetime) -> Anomaly | None:
+async def _detect_dead_zone(db, store_id: str, now: datetime) -> Optional[Anomaly]:
     dead_zone_mins = _dead_zone_minutes()
     window_start = (now - timedelta(minutes=dead_zone_mins)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -200,7 +201,7 @@ async def _detect_dead_zone(db, store_id: str, now: datetime) -> Anomaly | None:
     return None
 
 
-async def _detect_stale_feed(db, store_id: str, now: datetime) -> Anomaly | None:
+async def _detect_stale_feed(db, store_id: str, now: datetime) -> Optional[Anomaly]:
     stale_mins = _stale_feed_minutes()
     cutoff = (now - timedelta(minutes=stale_mins)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
