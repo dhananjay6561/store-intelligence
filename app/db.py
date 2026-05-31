@@ -3,7 +3,7 @@ Async SQLite connection pool using aiosqlite with WAL journal mode.
 Schema migrations run automatically on startup via _apply_migrations().
 """
 
-import json
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
@@ -63,6 +63,8 @@ class Database:
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
         self._conn: Optional[aiosqlite.Connection] = None
+        # Serialize all DB access — aiosqlite's single connection is not safe for concurrent callers
+        self._lock = asyncio.Lock()
 
     async def connect(self) -> None:
         self._conn = await aiosqlite.connect(self._db_path)
@@ -108,20 +110,26 @@ class Database:
 
     async def execute(self, sql: str, params: tuple = ()) -> aiosqlite.Cursor:
         assert self._conn is not None
-        return await self._conn.execute(sql, params)
+        async with self._lock:
+            return await self._conn.execute(sql, params)
 
     async def executemany(self, sql: str, params_seq: list[tuple]) -> None:
         assert self._conn is not None
-        await self._conn.executemany(sql, params_seq)
-        await self._conn.commit()
+        async with self._lock:
+            await self._conn.executemany(sql, params_seq)
+            await self._conn.commit()
 
     async def fetchone(self, sql: str, params: tuple = ()) -> Optional[aiosqlite.Row]:
-        cursor = await self.execute(sql, params)
-        return await cursor.fetchone()
+        assert self._conn is not None
+        async with self._lock:
+            cursor = await self._conn.execute(sql, params)
+            return await cursor.fetchone()
 
     async def fetchall(self, sql: str, params: tuple = ()) -> list[aiosqlite.Row]:
-        cursor = await self.execute(sql, params)
-        return await cursor.fetchall()
+        assert self._conn is not None
+        async with self._lock:
+            cursor = await self._conn.execute(sql, params)
+            return await cursor.fetchall()
 
 
 _db: Optional[Database] = None
