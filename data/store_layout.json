@@ -1,0 +1,88 @@
+{
+  "store_id": "ST1008",
+  "store_name": "Brigade_Bangalore",
+  "city": "Bangalore",
+  "frame_width": 1920,
+  "frame_height": 1080,
+  "cameras": {
+    "CAM_1": { "role": "entry",   "file": "CAM 1.mp4" },
+    "CAM_2": { "role": "floor",   "file": "CAM 2.mp4" },
+    "CAM_3": { "role": "floor",   "file": "CAM 3.mp4" },
+    "CAM_4": { "role": "billing", "file": "CAM 4.mp4" },
+    "CAM_5": { "role": "floor",   "file": "CAM 5.mp4" }
+  },
+  "entry_threshold": {
+    "camera_id": "CAM_1",
+    "line": [[0, 900], [1920, 900]],
+    "inbound_direction": "up"
+  },
+  "staff_uniform_hsv": {
+    "lower": [100, 50, 50],
+    "upper": [130, 255, 255]
+  },
+  "zones": [
+    {
+      "zone_id": "ENTRY_LOBBY",
+      "label": "Entry Lobby",
+      "camera_id": "CAM_1",
+      "polygon": [[0, 700], [1920, 700], [1920, 1080], [0, 1080]]
+    },
+    {
+      "zone_id": "MAKEUP",
+      "label": "Makeup",
+      "camera_id": "CAM_2",
+      "polygon": [[0, 0], [960, 0], [960, 540], [0, 540]]
+    },
+    {
+      "zone_id": "SKINCARE",
+      "label": "Skincare",
+      "camera_id": "CAM_2",
+      "polygon": [[960, 0], [1920, 0], [1920, 540], [960, 540]]
+    },
+    {
+      "zone_id": "BATH_BODY",
+      "label": "Bath & Body",
+      "camera_id": "CAM_2",
+      "polygon": [[0, 540], [640, 540], [640, 1080], [0, 1080]]
+    },
+    {
+      "zone_id": "HAIRCARE",
+      "label": "Haircare",
+      "camera_id": "CAM_3",
+      "polygon": [[0, 0], [960, 0], [960, 540], [0, 540]]
+    },
+    {
+      "zone_id": "FRAGRANCE",
+      "label": "Fragrance",
+      "camera_id": "CAM_3",
+      "polygon": [[960, 0], [1920, 0], [1920, 540], [960, 540]]
+    },
+    {
+      "zone_id": "PERSONAL_CARE",
+      "label": "Personal Care",
+      "camera_id": "CAM_3",
+      "polygon": [[0, 540], [960, 540], [960, 1080], [0, 1080]]
+    },
+    {
+      "zone_id": "BILLING",
+      "label": "Billing Counter",
+      "camera_id": "CAM_4",
+      "polygon": [[640, 0], [1920, 0], [1920, 1080], [640, 1080]]
+    },
+    {
+      "zone_id": "QUEUE_AREA",
+      "label": "Billing Queue",
+      "camera_id": "CAM_4",
+      "polygon": [[0, 0], [640, 0], [640, 1080], [0, 1080]]
+    },
+    {
+      "zone_id": "NEW_ARRIVALS",
+      "label": "New Arrivals",
+      "camera_id": "CAM_5",
+      "polygon": [[0, 0], [1920, 0], [1920, 540], [0, 540]]
+    }
+  ],
+  "camera_overlap_zones": [
+    { "camera_ids": ["CAM_1", "CAM_2"], "dedup_window_seconds": 10 }
+  ]
+}
