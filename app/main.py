@@ -18,6 +18,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import anomalies, funnel, health, heatmap, ingestion, metrics
 from app.db import close_db, init_db
@@ -182,3 +183,7 @@ async def event_stream(store_id: str, window: str = "all") -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# Serve dashboard at http://localhost:8000/ — must be mounted last
+app.mount("/", StaticFiles(directory="dashboard", html=True), name="dashboard")

@@ -1,6 +1,6 @@
 'use strict';
 
-const API_BASE       = window.API_BASE || 'http://localhost:8000';
+const API_BASE       = window.API_BASE || '';
 const CHART_MAX_PTS  = 30;
 const QUEUE_WARN     = 5;
 const QUEUE_CRITICAL = 8;
