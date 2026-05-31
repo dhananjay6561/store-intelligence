@@ -13,6 +13,7 @@ import pytest
 
 from pipeline.emit import CONF_LOW_THRESHOLD, EventEmitter, StoreEvent
 from pipeline.zone import ZoneClassifier
+from tests.conftest import async_client, db  # noqa: F401  — fixtures used by all-staff test
 
 
 # ---------------------------------------------------------------------------
@@ -204,3 +205,58 @@ def test_pos_correlator_ignores_wrong_store():
         pytest.skip("pos_transactions.csv not present")
     correlator = POSCorrelator.from_csv(csv_path, "NONEXISTENT_STORE")
     assert len(correlator._transactions) == 0
+
+
+# ---------------------------------------------------------------------------
+# Group entry — N simultaneous detections → N separate ENTRY events
+# ---------------------------------------------------------------------------
+
+def test_group_entry_emits_n_individual_entry_events():
+    """Three people entering together must produce 3 distinct ENTRY events with 3 distinct visitor_ids."""
+    from pipeline.emit import EventEmitter, StoreEvent
+    from pipeline.staff import StaffClassifier
+    from pipeline.tracker import Detection, VisitorTracker
+    from pipeline.zone import ZoneClassifier
+    import secrets
+
+    layout = {
+        "store_id": "ST1008",
+        "zones": [{"zone_id": "MAKEUP", "label": "Makeup", "polygon": [[0,0],[500,0],[500,500],[0,500]]}],
+    }
+    clip_ts = datetime(2026, 4, 10, 8, 0, 0, tzinfo=timezone.utc)
+    zc = ZoneClassifier(layout)
+    sc = StaffClassifier([100, 50, 50], [130, 255, 255])
+    tracker = VisitorTracker(zone_classifier=zc, staff_classifier=sc, fps=15.0)
+    emitter = EventEmitter(store_id="ST1008", camera_id="CAM_1", clip_start_ts=clip_ts, fps=15.0)
+
+    # Three people walk in simultaneously on frame 0
+    group = [
+        Detection(track_id=1, bbox=(50.0, 50.0, 100.0, 150.0), confidence=0.9, centroid=(75.0, 100.0), frame_number=0, timestamp=clip_ts, zone_id=None, queue_depth=0),
+        Detection(track_id=2, bbox=(200.0, 50.0, 260.0, 150.0), confidence=0.88, centroid=(230.0, 100.0), frame_number=0, timestamp=clip_ts, zone_id=None, queue_depth=0),
+        Detection(track_id=3, bbox=(400.0, 50.0, 460.0, 150.0), confidence=0.85, centroid=(430.0, 100.0), frame_number=0, timestamp=clip_ts, zone_id=None, queue_depth=0),
+    ]
+
+    tracker.update(group, frame_number=0, fps=15.0, clip_start_ts=clip_ts,
+                   emitter=emitter, store_id="ST1008", camera_id="CAM_1")
+
+    entry_events = [e for e in emitter._events if e["event_type"] == "ENTRY"]
+    assert len(entry_events) == 3, f"Expected 3 ENTRY events for group of 3, got {len(entry_events)}"
+
+    visitor_ids = {e["visitor_id"] for e in entry_events}
+    assert len(visitor_ids) == 3, "Each person in the group must get a distinct visitor_id"
+
+
+# ---------------------------------------------------------------------------
+# All-staff clip — zero customer metrics
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_all_staff_events_excluded_from_metrics(async_client):
+    """A clip where every tracked person is staff must yield 0 unique_visitors in /metrics."""
+    from tests.conftest import _make_event
+    staff_events = [_make_event(event_type="ENTRY", is_staff=True, session_seq=1).model_dump() for _ in range(5)]
+    await async_client.post("/events/ingest", json={"events": staff_events})
+
+    resp = await async_client.get(f"/stores/ST1008/metrics?window=all")
+    assert resp.status_code == 200
+    assert resp.json()["unique_visitors"] == 0

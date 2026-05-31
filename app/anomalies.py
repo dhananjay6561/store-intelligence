@@ -114,6 +114,10 @@ async def _detect_queue_spike(db, store_id: str, now: datetime) -> Optional[Anom
 async def _detect_conversion_drop(db, store_id: str, now: datetime) -> Optional[Anomaly]:
     drop_threshold = _conversion_drop_pct()
 
+    # Day-0 behaviour: if the 7-day rolling average returns 0.0 (no historical data yet),
+    # we skip the anomaly entirely rather than emitting a spurious CONVERSION_DROP on the
+    # first day the store goes live. The check `if avg_rate == 0.0: return None` below handles this.
+
     # Today's conversion rate
     today_start = now.strftime("%Y-%m-%dT00:00:00Z")
     today_end = now.strftime("%Y-%m-%dT23:59:59Z")

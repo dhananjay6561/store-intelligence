@@ -348,10 +348,14 @@ open http://localhost:8000
 ### Docker
 
 ```bash
+# Start API + dashboard (no pipeline)
 docker compose up --build
+
+# Start everything including the detection pipeline
+docker compose --profile pipeline up --build
 ```
 
-Starts the API and serves the dashboard at `http://localhost:8000`. The pipeline service starts only when run with `--profile pipeline`.
+`docker compose up` (without `--profile pipeline`) starts only the API and dashboard. The pipeline service is profile-gated because it requires the CCTV clips to be mounted at `data/clips/` — the scorer should run `--profile pipeline` only after placing the clips there.
 
 ### Run the detection pipeline
 
