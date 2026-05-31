@@ -1,6 +1,7 @@
 'use strict';
 
-const API_BASE       = window.API_BASE || '';
+const API_BASE = window.API_BASE ||
+  (window.location.protocol === 'file:' ? 'http://localhost:8000' : '');
 const CHART_MAX_PTS  = 30;
 const QUEUE_WARN     = 5;
 const QUEUE_CRITICAL = 8;
