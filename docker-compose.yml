@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "sqlite+aiosqlite:///./data/store_intel.db"
+      STORE_LAYOUT_PATH: "./data/store_layout.json"
+      LOG_LEVEL: "INFO"
+      QUEUE_SPIKE_WARN_THRESHOLD: "5"
+      QUEUE_SPIKE_CRITICAL_THRESHOLD: "8"
+      STALE_FEED_MINUTES: "10"
+      DEAD_ZONE_MINUTES: "30"
+      CONVERSION_DROP_PCT: "0.70"
+    volumes:
+      - store_data:/app/data
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  dashboard:
+    image: python:3.11-slim
+    command: >
+      python3 -m http.server 3000
+        --directory /dashboard
+        --bind 0.0.0.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./dashboard:/dashboard:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile.pipeline
+    environment:
+      CLIPS_DIR: "/pipeline/data/clips"
+      OUTPUT_DIR: "/pipeline/data/events"
+      LAYOUT: "/pipeline/data/store_layout.json"
+      POS: "/pipeline/data/pos_transactions.csv"
+      API_URL: "http://api:8000"
+    volumes:
+      - store_data:/pipeline/data
+      - ./data:/pipeline/data/source:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles:
+      - pipeline
+    restart: "no"
+
+volumes:
+  store_data:

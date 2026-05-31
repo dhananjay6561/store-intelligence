@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+WORKDIR /pipeline
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+        ultralytics \
+        opencv-python-headless \
+        numpy \
+        pydantic \
+        python-dotenv
+
+COPY pipeline/ ./pipeline/
+COPY data/     ./data/
+COPY scripts/  ./scripts/
+
+RUN mkdir -p /pipeline/data/events /pipeline/data/clips
+
+ENV CLIPS_DIR="/pipeline/data/clips" \
+    OUTPUT_DIR="/pipeline/data/events" \
+    LAYOUT="/pipeline/data/store_layout.json" \
+    POS="/pipeline/data/pos_transactions.csv" \
+    API_URL="http://api:8000"
+
+CMD ["bash", "pipeline/run.sh"]
