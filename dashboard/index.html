@@ -3,79 +3,183 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Store Intelligence — Live Dashboard</title>
+  <title>Store Intelligence — Brigade Bangalore</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <header>
-    <div class="header-inner">
-      <span class="logo">Store Intelligence</span>
-      <div class="store-selector">
-        <label for="storeSelect">Store:</label>
-        <select id="storeSelect">
-          <option value="ST1008">ST1008 — Brigade_Bangalore</option>
-        </select>
+
+  <!-- Top nav -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span class="brand-name">Store Intelligence</span>
       </div>
-      <div class="feed-status" id="feedStatus">● Connecting…</div>
+      <div class="divider-v"></div>
+      <div class="store-pill">
+        <span class="store-dot"></span>
+        <span id="storeName">Brigade_Bangalore</span>
+        <span class="store-id">ST1008</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="feed-badge" id="feedBadge">
+        <span class="feed-dot" id="feedDot"></span>
+        <span id="feedLabel">Connecting…</span>
+      </div>
+      <div class="last-updated" id="lastUpdated">—</div>
     </div>
   </header>
 
-  <main>
-    <!-- Top KPI row -->
-    <div class="kpi-row">
-      <div class="kpi-card" id="kvVisitors">
-        <div class="kpi-label">Unique Visitors</div>
-        <div class="kpi-value" id="valVisitors">—</div>
-        <div class="kpi-sub">today</div>
-      </div>
-      <div class="kpi-card" id="kvConversion">
-        <div class="kpi-label">Conversion Rate</div>
-        <div class="kpi-value" id="valConversion">—</div>
-        <div class="kpi-sub">visitors → purchase</div>
-      </div>
-      <div class="kpi-card" id="kvQueue">
-        <div class="kpi-label">Queue Depth</div>
-        <div class="kpi-value" id="valQueue">—</div>
-        <div class="kpi-sub">billing counter now</div>
-      </div>
-      <div class="kpi-card" id="kvAbandonment">
-        <div class="kpi-label">Abandonment Rate</div>
-        <div class="kpi-value" id="valAbandonment">—</div>
-        <div class="kpi-sub">left billing queue</div>
-      </div>
-    </div>
+  <!-- Page body -->
+  <div class="page">
 
-    <!-- Conversion rate chart + zone heatmap -->
-    <div class="mid-row">
-      <div class="chart-panel">
-        <div class="panel-title">Conversion Rate — Live (last 30 ticks)</div>
-        <canvas id="conversionChart" height="120"></canvas>
+    <!-- Section: KPIs -->
+    <section class="section">
+      <div class="kpi-grid">
+
+        <div class="kpi-card" id="cardVisitors">
+          <div class="kpi-top">
+            <span class="kpi-label">Unique Visitors</span>
+            <span class="kpi-icon kpi-icon--blue">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+          </div>
+          <div class="kpi-value" id="valVisitors">—</div>
+          <div class="kpi-meta">customer sessions today</div>
+        </div>
+
+        <div class="kpi-card" id="cardConversion">
+          <div class="kpi-top">
+            <span class="kpi-label">Conversion Rate</span>
+            <span class="kpi-icon kpi-icon--purple">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            </span>
+          </div>
+          <div class="kpi-value" id="valConversion">—</div>
+          <div class="kpi-meta">visitors → purchase</div>
+        </div>
+
+        <div class="kpi-card" id="cardQueue">
+          <div class="kpi-top">
+            <span class="kpi-label">Queue Depth</span>
+            <span class="kpi-icon kpi-icon--amber">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </span>
+          </div>
+          <div class="kpi-value" id="valQueue">—</div>
+          <div class="kpi-meta">at billing counter now</div>
+          <div class="queue-bar-track"><div class="queue-bar-fill" id="queueBar"></div></div>
+        </div>
+
+        <div class="kpi-card" id="cardAbandonment">
+          <div class="kpi-top">
+            <span class="kpi-label">Abandonment Rate</span>
+            <span class="kpi-icon kpi-icon--red">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+            </span>
+          </div>
+          <div class="kpi-value" id="valAbandonment">—</div>
+          <div class="kpi-meta">left billing queue</div>
+        </div>
+
       </div>
-      <div class="heatmap-panel">
-        <div class="panel-title">Zone Heatmap</div>
-        <div class="zone-grid" id="zoneGrid">
-          <div class="zone-placeholder">Waiting for data…</div>
+    </section>
+
+    <!-- Section: Chart + Heatmap -->
+    <section class="section two-col">
+
+      <!-- Conversion trend -->
+      <div class="card chart-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Conversion Rate Trend</div>
+            <div class="card-sub">Live — updates every 2 seconds</div>
+          </div>
+          <div class="live-chip">
+            <span class="live-dot"></span> LIVE
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="conversionChart"></canvas>
         </div>
       </div>
-    </div>
 
-    <!-- Anomalies panel -->
-    <div class="anomaly-panel">
-      <div class="panel-title">
-        Active Anomalies
-        <span class="anomaly-badge" id="anomalyBadge">0</span>
+      <!-- Zone heatmap -->
+      <div class="card heatmap-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Zone Heatmap</div>
+            <div class="card-sub">Visit frequency by store area</div>
+          </div>
+          <div class="confidence-chip" id="confidenceChip">—</div>
+        </div>
+        <div class="heatmap-legend">
+          <span class="legend-label">Low</span>
+          <div class="legend-bar"></div>
+          <span class="legend-label">High</span>
+        </div>
+        <div class="zone-grid" id="zoneGrid">
+          <div class="zone-placeholder">Loading zones…</div>
+        </div>
       </div>
-      <ul class="anomaly-list" id="anomalyList">
-        <li class="anomaly-empty">No anomalies detected</li>
-      </ul>
-    </div>
-  </main>
 
-  <footer>
-    <span id="lastUpdated">Last updated: —</span>
-    <span id="traceId"></span>
-  </footer>
+    </section>
+
+    <!-- Section: Funnel + Anomalies -->
+    <section class="section two-col">
+
+      <!-- Funnel -->
+      <div class="card funnel-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Conversion Funnel</div>
+            <div class="card-sub">Session-level drop-off</div>
+          </div>
+        </div>
+        <div class="funnel-stages" id="funnelStages">
+          <div class="funnel-placeholder">Loading funnel…</div>
+        </div>
+      </div>
+
+      <!-- Anomalies -->
+      <div class="card anomaly-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              Active Anomalies
+              <span class="anomaly-count" id="anomalyCount">0</span>
+            </div>
+            <div class="card-sub">Real-time alert monitoring</div>
+          </div>
+        </div>
+        <div class="anomaly-list" id="anomalyList">
+          <div class="anomaly-empty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span>All systems normal</span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="footer-bar">
+    <span>Brigade Road, Bangalore</span>
+    <span class="footer-sep">·</span>
+    <span id="footerTs">—</span>
+    <span class="footer-sep">·</span>
+    <span>5 cameras · 5,499 events</span>
+  </div>
 
   <script src="app.js"></script>
 </body>
