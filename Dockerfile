@@ -25,7 +25,9 @@ USER user
 ENV DATABASE_URL="sqlite+aiosqlite:///./data/store_intel.db" \
     STORE_LAYOUT_PATH="./data/store_layout.json" \
     LOG_LEVEL="INFO" \
-    PORT="7860"
+    PORT="7860" \
+    STALE_FEED_MINUTES="999999" \
+    DEAD_ZONE_MINUTES="999999"
 
 EXPOSE 7860
 

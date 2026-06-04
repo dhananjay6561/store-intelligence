@@ -21,7 +21,13 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-python3 scripts/seed_events.py --events-dir data/events --api-url "http://localhost:${PORT}" \
+# Rebase the historical clip timestamps to end at "now" so the feed reads live.
+SEED_DIR="/tmp/seed"
+mkdir -p "$SEED_DIR"
+python3 scripts/rebase_events.py data/events/ST1008_events.jsonl "$SEED_DIR/ST1008_events.jsonl" \
+  || cp data/events/ST1008_events.jsonl "$SEED_DIR/ST1008_events.jsonl"
+
+python3 scripts/seed_events.py --events-dir "$SEED_DIR" --api-url "http://localhost:${PORT}" \
   || echo "WARN: seed step failed, dashboard may be empty"
 
 wait "$SERVER_PID"
