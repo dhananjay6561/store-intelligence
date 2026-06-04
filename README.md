@@ -1,3 +1,14 @@
+<!-- The YAML block below configures the Hugging Face Space. It is ignored by GitHub. -->
+---
+title: Store Intelligence Brigade
+emoji: 🛍️
+colorFrom: purple
+colorTo: pink
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Store Intelligence — Brigade Bangalore
 
 Retail analytics system that converts raw CCTV footage into a live metrics API for Purplle's Brigade Road store. Runs YOLOv8n person detection on five camera feeds, tracks visitors across the store floor, correlates dwell time and zone visits with POS transactions, and exposes a queryable REST API with a live web dashboard.
