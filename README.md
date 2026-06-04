@@ -1,4 +1,3 @@
-<!-- The YAML block below configures the Hugging Face Space. It is ignored by GitHub. -->
 ---
 title: Store Intelligence Brigade
 emoji: 🛍️
